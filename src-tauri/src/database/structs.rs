@@ -797,4 +797,215 @@ impl Serialise for InternalContent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use time::{Duration, OffsetDateTime, UtcOffset};
+
+    fn sample_kdf() -> KDFParams {
+        KDFParams {
+            variant: KeyDerivationFunction::Argon2id,
+            salt: [1u8; 32],
+            iterations: 1,
+            memory: 8,
+            threads: 1,
+        }
+    }
+
+    fn sample_header_fields(enc: EncryptionAlgorithm, comp: CompressionAlgorithm) -> HeaderFields {
+        HeaderFields {
+            encryption: enc,
+            compression: comp,
+            salt: [2u8; 32],
+            init_vector: [3u8; 12],
+            key_derivation_params: sample_kdf(),
+        }
+    }
+
+    fn sample_entry() -> Entry {
+        let now = OffsetDateTime::now_utc().to_offset(UtcOffset::from_whole_seconds(3600).unwrap());
+        Entry {
+            icon: "<svg/>".to_string(),
+            username: "user".to_string(),
+            password: b"pass123".to_vec(),
+            url: "https://example.com".to_string(),
+            expiry: Some(now + Duration::days(10)),
+            notes: "note".to_string(),
+        }
+    }
+
+    fn sample_db(enc: EncryptionAlgorithm, comp: CompressionAlgorithm) -> DatabaseFile {
+        let fields = sample_header_fields(enc, comp);
+        let header = Header::new(fields);
+        let ic = InternalContent {
+            entries: vec![sample_entry(), sample_entry()],
+            files: vec![Vec::new(), vec![b"file1".to_vec()]],
+        };
+        DatabaseFile::new(header, ic)
+    }
+
+    #[test]
+    fn header_fields_serialisation_roundtrip() {
+        let fields = sample_header_fields(EncryptionAlgorithm::Aes, CompressionAlgorithm::Lz4);
+        let mut buf = Vec::new();
+        fields.serialise(&mut buf).unwrap();
+
+        let parsed = HeaderFields::deserialise(&mut buf.as_slice()).unwrap();
+
+        assert_eq!(parsed.encryption.to_u8(), fields.encryption.to_u8());
+        assert_eq!(parsed.compression.to_u8(), fields.compression.to_u8());
+        assert_eq!(parsed.salt, fields.salt);
+        assert_eq!(parsed.init_vector, fields.init_vector);
+
+        // KDF params equality
+        let p = &parsed.key_derivation_params;
+        let f = &fields.key_derivation_params;
+        assert_eq!(p.variant.to_u8(), f.variant.to_u8());
+        assert_eq!(p.salt, f.salt);
+        assert_eq!(p.iterations, f.iterations);
+        assert_eq!(p.memory, f.memory);
+        assert_eq!(p.threads, f.threads);
+    }
+
+    #[test]
+    fn kdf_params_serialisation_roundtrip() {
+        let params = sample_kdf();
+        let mut buf = Vec::new();
+        params.serialise(&mut buf).unwrap();
+
+        let parsed = KDFParams::deserialise(&mut buf.as_slice()).unwrap();
+
+        assert_eq!(parsed.variant.to_u8(), params.variant.to_u8());
+        assert_eq!(parsed.salt, params.salt);
+        assert_eq!(parsed.iterations, params.iterations);
+        assert_eq!(parsed.memory, params.memory);
+        assert_eq!(parsed.threads, params.threads);
+    }
+
+    #[test]
+    fn entry_and_time_roundtrip() {
+        let entry = sample_entry();
+
+        let mut buf = Vec::new();
+        entry.serialise(&mut buf).unwrap();
+
+        let parsed = Entry::deserialise(&mut buf.as_slice()).unwrap();
+
+        assert_eq!(parsed.icon, entry.icon);
+        assert_eq!(parsed.username, entry.username);
+        assert_eq!(parsed.password, entry.password);
+        assert_eq!(parsed.url, entry.url);
+        assert_eq!(parsed.notes, entry.notes);
+
+        match (parsed.expiry, entry.expiry) {
+            (Some(a), Some(b)) => {
+                assert_eq!(a.unix_timestamp(), b.unix_timestamp());
+                assert_eq!(a.offset().whole_seconds(), b.offset().whole_seconds());
+            }
+            (None, None) => {}
+            _ => panic!("expiry mismatch"),
+        }
+    }
+
+    #[test]
+    fn internal_content_invariant_mismatch_errors() {
+        // files.len() != entries.len() should error
+        let ic = InternalContent {
+            entries: vec![sample_entry()],
+            files: vec![], // mismatch
+        };
+        let mut buf = Vec::new();
+        let err = ic.serialise(&mut buf).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn database_aes_gcm_serialise_deserialise() {
+        let db = sample_db(EncryptionAlgorithm::Aes, CompressionAlgorithm::None);
+
+        let master = b"master_password";
+
+        // Write to buffer
+        let mut buf = Vec::new();
+        db.serialise(&mut buf, master).unwrap();
+
+        // Read back via file-like API using a temp file path
+        // Use deserialise(path, master)
+        // Since deserialise expects a path, write to a tempfile.
+        let tmp = std::env::temp_dir().join("forseti_test_aes_gcm.tfedb");
+        std::fs::write(&tmp, &buf).unwrap();
+
+        let loaded = DatabaseFile::deserialise(tmp.to_str().unwrap(), master).unwrap();
+
+        // Basic structural checks
+        assert_eq!(
+            loaded.header.fields.encryption.to_u8(),
+            db.header.fields.encryption.to_u8()
+        );
+        assert_eq!(
+            loaded.header.fields.compression.to_u8(),
+            db.header.fields.compression.to_u8()
+        );
+        assert_eq!(
+            loaded.internal_content.entries.len(),
+            db.internal_content.entries.len()
+        );
+        assert_eq!(
+            loaded.internal_content.files.len(),
+            db.internal_content.files.len()
+        );
+    }
+
+    #[test]
+    fn database_chacha20_serialise_deserialise() {
+        let db = sample_db(EncryptionAlgorithm::ChaCha20, CompressionAlgorithm::Lz4);
+
+        let master = b"master_password_2";
+
+        let mut buf = Vec::new();
+        db.serialise(&mut buf, master).unwrap();
+
+        let tmp = std::env::temp_dir().join("forseti_test_chacha20.tfedb");
+        std::fs::write(&tmp, &buf).unwrap();
+
+        let loaded = DatabaseFile::deserialise(tmp.to_str().unwrap(), master).unwrap();
+
+        assert_eq!(
+            loaded.header.fields.encryption.to_u8(),
+            db.header.fields.encryption.to_u8()
+        );
+        assert_eq!(
+            loaded.header.fields.compression.to_u8(),
+            db.header.fields.compression.to_u8()
+        );
+        assert_eq!(
+            loaded.internal_content.entries.len(),
+            db.internal_content.entries.len()
+        );
+        assert_eq!(
+            loaded.internal_content.files.len(),
+            db.internal_content.files.len()
+        );
+    }
+
+    #[test]
+    fn wrong_master_password_fails() {
+        let db = sample_db(EncryptionAlgorithm::Aes, CompressionAlgorithm::GZip);
+        let correct = b"correct_pw";
+        let wrong = b"wrong_pw";
+
+        let mut buf = Vec::new();
+        db.serialise(&mut buf, correct).unwrap();
+
+        let tmp = std::env::temp_dir().join("forseti_test_wrong_pw.tfedb");
+        std::fs::write(&tmp, &buf).unwrap();
+
+        let result = DatabaseFile::deserialise(tmp.to_str().unwrap(), wrong);
+        match result {
+            Ok(_) => panic!("deserialise unexpectedly succeeded with wrong password"),
+            Err(err) => {
+                assert!(matches!(
+                    err.kind(),
+                    std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::InvalidData
+                ));
+            }
+        }
+    }
 }
