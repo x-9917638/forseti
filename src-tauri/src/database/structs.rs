@@ -14,7 +14,7 @@ use lz4_flex::frame::FrameEncoder;
 use rand::{Rng, TryRngCore, rng, rngs::OsRng};
 use std::{
     env,
-    fs::{File, rename},
+    fs::{File, copy, remove_file, rename},
     io::{self, Read, Write},
 };
 use time::{self, OffsetDateTime};
@@ -171,7 +171,14 @@ impl DatabaseFile {
                 let tmp_path = self.serialise_to_tmp(master_password)?;
                 // Move tmpfile to correct path
                 // This MUST be on the same filesystem.
-                rename(tmp_path, path)?;
+                match rename(&tmp_path, path) {
+                    Ok(_) => (),
+                    Err(e) if e.kind() == io::ErrorKind::CrossesDevices => {
+                        copy(&tmp_path, path)?;
+                        remove_file(tmp_path)?;
+                    }
+                    Err(e) => Err(e)?,
+                }
                 Ok(())
             }
             SaveMethod::Direct => {
