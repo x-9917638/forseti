@@ -1,12 +1,40 @@
 <script lang="ts">
-    import { invoke } from "@tauri-apps/api/core";
+    import { commands } from "../bindings";
 
     let name = $state("");
     let greetMsg = $state("");
 
     async function greet(event: Event) {
         event.preventDefault();
-        // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+        let dbArgs = {
+            encryption: 0,
+            compression: 1,
+            kdfVariant: 1,
+            kdfIterations: 3,
+            kdfMemoryKb: 65536,
+            kdfThreads: 1,
+        };
+        await commands.newDb(dbArgs);
+
+        const open = await commands.isDbOpen();
+        let args = {
+            icon: "<svg/>",
+            username: "user",
+            password: "pass123",
+            url: "https://example.com",
+            expiryUnix: null,
+            expiryOffsetSecs: null,
+            notes: "note",
+        };
+        commands.addEntry(args);
+        const entries = await commands.listEntries();
+        console.log(JSON.stringify(entries.data, null, 2));
+        commands.saveDb({
+            path: "/home/val/testDb.fedb",
+            masterPassword: "test123 :3",
+            atomic: true,
+        });
+        commands.closeDb();
     }
 </script>
 

@@ -45,4 +45,8 @@ fn export_types() {
             "../src/bindings.ts",
         )
         .expect("Failed to export typescript bindings");
+    let _ = std::process::Command::new("npx")
+        .arg("ts-node")
+        .arg("/home/val/Documents/forseti/convert-to-object-params.ts")
+        .output();
 }
