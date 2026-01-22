@@ -124,12 +124,29 @@ impl DatabaseFile {
         }
 
         // Decrypt
-        let internal_content = DatabaseFile::decrypt(
+        let internal_content_buf = DatabaseFile::decrypt(
             &header.fields.encryption,
             &header.fields.init_vector,
             &derived_key,
             internal_ciphertext,
         )?;
+
+        let internal_content = match header.fields.compression {
+            CompressionAlgorithm::None => internal_content_buf,
+            CompressionAlgorithm::Lz4 => {
+                let mut decoder = lz4_flex::frame::FrameDecoder::new(&internal_content_buf[..]);
+                let mut out = Vec::new();
+                std::io::copy(&mut decoder, &mut out)?;
+                out
+            }
+            CompressionAlgorithm::GZip => {
+                let mut decoder = flate2::read::GzDecoder::new(&internal_content_buf[..]);
+                let mut out = Vec::new();
+                std::io::copy(&mut decoder, &mut out)?;
+                out
+            }
+        };
+
         let internal_content = InternalContent::deserialise(&mut internal_content.as_slice())?;
 
         Ok(Self {
@@ -749,11 +766,12 @@ impl Serialise for InternalContent {
 
         // Writing lengths allows for preallocating vectors during deserialisation.
         write_u64(w, self.entries.len() as u64)?;
+        write_u64(w, self.files.len() as u64)?;
+
         for entry in &self.entries {
             entry.serialise(w)?;
         }
 
-        write_u64(w, self.files.len() as u64)?;
         for entry_files in &self.files {
             write_u64(w, entry_files.len() as u64)?;
             for file in entry_files {
