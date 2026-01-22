@@ -84,7 +84,7 @@ impl DatabaseFile {
     /// Given a path to read from, deserialise a file
     /// into a DatabaseFile. This method decrypts the internal contents
     /// and zeroises the 2 hashes.
-    fn deserialise(path: &str, master_password: &[u8]) -> Result<Self, io::Error> {
+    pub fn deserialise(path: &str, master_password: &[u8]) -> Result<Self, io::Error> {
         let mut dbfile = File::open(path)?;
         let mut header_buf = [0u8; HEADER_SIZE];
         dbfile.read_exact(&mut header_buf)?;
@@ -157,7 +157,7 @@ impl DatabaseFile {
         })
     }
 
-    fn save(
+    pub fn save(
         &mut self,
         path: &str,
         method: SaveMethod,
@@ -485,7 +485,7 @@ impl EncryptionAlgorithm {
             _ => unreachable!("Invalid value for encryption algorithm"),
         }
     }
-    fn try_from_u8(i: u8) -> Result<Self, io::Error> {
+    pub fn try_from_u8(i: u8) -> Result<Self, io::Error> {
         match i {
             0 => Ok(Self::Aes),
             1 => Ok(Self::ChaCha20),
@@ -519,7 +519,7 @@ impl CompressionAlgorithm {
             _ => unreachable!("Invalid value for compression algorithm"),
         }
     }
-    fn try_from_u8(i: u8) -> Result<Self, io::Error> {
+    pub fn try_from_u8(i: u8) -> Result<Self, io::Error> {
         match i {
             0 => Ok(Self::None),
             1 => Ok(Self::Lz4),
@@ -630,7 +630,7 @@ impl KeyDerivationFunction {
             _ => unreachable!("Invalid value for key derivation function"),
         }
     }
-    fn try_from_u8(i: u8) -> Result<Self, io::Error> {
+    pub fn try_from_u8(i: u8) -> Result<Self, io::Error> {
         match i {
             0 => Ok(Self::Argon2d),
             1 => Ok(Self::Argon2id),
@@ -654,6 +654,26 @@ pub struct Entry {
     expiry: Option<time::OffsetDateTime>,
     /// Any extra notes that the user records.
     notes: String,
+}
+
+impl Entry {
+    pub fn new(
+        icon: &str,
+        username: &str,
+        password: Vec<u8>,
+        url: &str,
+        expiry: Option<time::OffsetDateTime>,
+        notes: &str,
+    ) -> Self {
+        Self {
+            icon: icon.to_string(),
+            username: username.to_string(),
+            password,
+            url: url.to_string(),
+            expiry,
+            notes: notes.to_string(),
+        }
+    }
 }
 
 impl Serialise for Entry {
@@ -754,6 +774,15 @@ pub struct InternalContent {
     files: Vec<Vec<Vec<u8>>>,
 }
 
+impl InternalContent {
+    pub fn empty() -> Self {
+        Self {
+            entries: Vec::new(),
+            files: Vec::new(),
+        }
+    }
+}
+
 impl Serialise for InternalContent {
     fn serialise<W: Write>(&self, w: &mut W) -> io::Result<()> {
         // Enforce invariant before serialisation
@@ -809,6 +838,85 @@ impl Serialise for InternalContent {
         }
 
         Ok(Self { entries, files })
+    }
+}
+
+#[derive(serde::Serialize)]
+#[cfg_attr(debug_assertions, derive(specta::Type))]
+pub struct EntryDto {
+    pub icon: String,
+    pub username: String,
+    pub url: String,
+    pub expiry_unix: Option<i64>,
+    pub expiry_offset_secs: Option<i32>,
+    pub notes: String,
+}
+
+impl Entry {
+    pub fn to_dto(&self) -> EntryDto {
+        let (expiry_unix, expiry_offset) = match self.expiry {
+            Some(dt) => (Some(dt.unix_timestamp()), Some(dt.offset().whole_seconds())),
+            None => (None, None),
+        };
+        EntryDto {
+            icon: self.icon.clone(),
+            username: self.username.clone(),
+            url: self.url.clone(),
+            expiry_unix,
+            expiry_offset_secs: expiry_offset,
+            notes: self.notes.clone(),
+        }
+    }
+}
+
+impl DatabaseFile {
+    /// Returns a list of entries as JSON-friendly DTOs without exposing secrets.
+    pub fn list_entries_dto(&self) -> Vec<EntryDto> {
+        self.internal_content
+            .entries
+            .iter()
+            .map(|e| e.to_dto())
+            .collect()
+    }
+
+    /// Adds an entry to the database, maintaining the files invariant.
+    /// `password` is provided as bytes; frontend should pass UTF-8 or arbitrary bytes as needed.
+    pub fn add_entry_plain(
+        &mut self,
+        icon: &str,
+        username: &str,
+        password: Vec<u8>,
+        url: &str,
+        expiry_unix: Option<i64>,
+        expiry_offset_secs: Option<i32>,
+        notes: &str,
+    ) -> Result<(), std::io::Error> {
+        let expiry = match (expiry_unix, expiry_offset_secs) {
+            (Some(unix), Some(offset)) => {
+                let dt = time::OffsetDateTime::from_unix_timestamp(unix).map_err(|e| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("invalid unix timestamp: {e}"),
+                    )
+                })?;
+                let off = time::UtcOffset::from_whole_seconds(offset).map_err(|e| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("invalid utc offset: {e}"),
+                    )
+                })?;
+                Some(dt.to_offset(off))
+            }
+            _ => None,
+        };
+
+        let entry = Entry::new(icon, username, password, url, expiry, notes);
+
+        self.internal_content.entries.push(entry);
+        // Maintain invariant: files.len() == entries.len()
+        self.internal_content.files.push(Vec::new());
+
+        Ok(())
     }
 }
 
