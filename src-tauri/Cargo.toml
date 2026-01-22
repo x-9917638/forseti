@@ -1,3 +1,5 @@
+cargo-features = ["profile-rustflags"]
+
 [package]
 name = "forseti"
 version = "0.1.0"
@@ -36,3 +38,15 @@ chacha20poly1305 = "0.10.1"
 tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
 specta = "=2.0.0-rc.22"
 specta-typescript = "=0.0.9"
+
+[profile.dev]
+incremental = true # Compile your binary in smaller steps.
+rustflags = ["-Zthreads=8"] # Better compile performance.
+
+[profile.release]
+codegen-units = 1 # Allows LLVM to perform better optimization.
+lto = true # Enables link-time-optimizations.
+opt-level = "s" # Prioritizes small binary size. Use `3` if you prefer speed.
+panic = "abort" # Higher performance by disabling panic handlers.
+strip = true # Ensures debug symbols are removed.
+rustflags = ["-Cdebuginfo=0", "-Zthreads=12"] # Better compile performance.
