@@ -28,6 +28,7 @@ pub fn run() {
 
 // Setup function for configuration of Tauri from Rust.
 fn app_setup(app: &mut App) -> Result<(), Box<dyn error::Error>> {
+    app.remove_menu()?;
     Ok(())
 }
 
@@ -50,7 +51,7 @@ fn export_types() {
     builder
         .export(
             Typescript::new().bigint(specta_typescript::BigIntExportBehavior::Number),
-            "../src/bindings.ts",
+            "/home/val/Documents/forseti/src/lib/bindings.ts",
         )
         .expect("Failed to export typescript bindings");
     let _ = std::process::Command::new("npx")

@@ -117,7 +117,7 @@ pub fn list_entries(state: State<AppState>) -> Result<Vec<EntryDto>, String> {
 pub fn add_entry(
     state: State<AppState>,
     icon: String,
-    fields: HashMap<String, Vec<u8>>,
+    fields: HashMap<String, String>,
     url: String,
     expiry_unix: Option<i64>,
     expiry_offset_secs: Option<i32>,
@@ -129,7 +129,10 @@ pub fn add_entry(
     let db = guard
         .as_mut()
         .ok_or_else(|| "no database open".to_string())?;
-
+    let fields = fields
+        .into_iter()
+        .map(|(k, v)| (k, v.into_bytes()))
+        .collect();
     db.add_entry_plain(&icon, fields, &url, expiry_unix, expiry_offset_secs)
         .map_err(|e| format!("failed to add entry: {e}"))?;
 
