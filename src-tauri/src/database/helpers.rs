@@ -21,6 +21,11 @@ pub fn write_string<W: Write>(w: &mut W, s: &str) -> io::Result<()> {
     write_bytes(w, s.as_bytes())
 }
 
+pub fn write_key_value<W: Write>(w: &mut W, k: &str, v: &[u8]) -> io::Result<()> {
+    write_string(w, k)?;
+    write_bytes(w, v)
+}
+
 pub fn read_u8<R: Read>(r: &mut R) -> io::Result<u8> {
     let mut buf = [0u8; 1];
     r.read_exact(&mut buf)?;
@@ -49,4 +54,8 @@ pub fn read_bytes<R: Read>(r: &mut R) -> io::Result<Vec<u8>> {
 pub fn read_string<R: Read>(r: &mut R) -> io::Result<String> {
     let bytes = read_bytes(r)?;
     String::from_utf8(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
+pub fn read_key_value<R: Read>(r: &mut R) -> io::Result<(String, Vec<u8>)> {
+    Ok((read_string(r)?, read_bytes(r)?))
 }

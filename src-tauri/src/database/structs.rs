@@ -13,6 +13,7 @@ use flate2::{Compression, write::GzEncoder};
 use lz4_flex::frame::FrameEncoder;
 use rand::{Rng, TryRngCore, rng, rngs::OsRng};
 use std::{
+    collections::HashMap,
     env,
     fs::{File, copy, remove_file, rename},
     io::{self, Read, Write},
@@ -654,31 +655,28 @@ pub struct Entry {
     ///
     /// An empty string represents no icon.
     icon: String,
-    username: String,
-    password: Vec<u8>,
+    /// Fields have arbitrary names and values, set by the user.
+    /// They can hold passwords, notes, etc.
+    fields: HashMap<String, Vec<u8>>,
+    /// URL's have a specific field in order to easier integrate with
+    /// the browser extension.
     url: String,
     /// The date and time of password expiry, in local timezone.
     expiry: Option<time::OffsetDateTime>,
-    /// Any extra notes that the user records.
-    notes: String,
 }
 
 impl Entry {
     pub fn new(
         icon: &str,
-        username: &str,
-        password: Vec<u8>,
+        fields: HashMap<String, Vec<u8>>,
         url: &str,
         expiry: Option<time::OffsetDateTime>,
-        notes: &str,
     ) -> Self {
         Self {
             icon: icon.to_string(),
-            username: username.to_string(),
-            password,
+            fields,
             url: url.to_string(),
             expiry,
-            notes: notes.to_string(),
         }
     }
 }
@@ -686,8 +684,13 @@ impl Entry {
 impl Serialise for Entry {
     fn serialise<W: Write>(&self, w: &mut W) -> io::Result<()> {
         write_string(w, &self.icon)?;
-        write_string(w, &self.username)?;
-        write_bytes(w, &self.password)?; // or Vec<u8>
+
+        // We write the number of fields we have for deserialisation later.
+        write_u64(w, self.fields.len() as u64)?;
+        for (name, value) in &self.fields {
+            write_key_value(w, name, value)?;
+        }
+
         write_string(w, &self.url)?;
 
         match &self.expiry {
@@ -699,15 +702,18 @@ impl Serialise for Entry {
                 write_u8(w, 0)?;
             }
         }
-
-        write_string(w, &self.notes)?;
         Ok(())
     }
 
     fn deserialise<R: Read>(r: &mut R) -> io::Result<Self> {
         let icon = read_string(r)?;
-        let username = read_string(r)?;
-        let password = read_bytes(r)?;
+        let num_fields = read_u64(r)?;
+        let mut fields = HashMap::new(); //with_capacity(num_fields as usize);
+        for _ in 0..num_fields {
+            let (key, value) = read_key_value(r)?;
+            // We should never run into an existing key.
+            assert_eq!(None, fields.insert(key, value));
+        }
         let url = read_string(r)?;
 
         // A 0 indicates no expiry set.
@@ -716,15 +722,12 @@ impl Serialise for Entry {
         } else {
             None
         };
-        let notes = read_string(r)?;
 
         Ok(Self {
             icon,
-            username,
-            password,
+            fields,
             url,
             expiry,
-            notes,
         })
     }
 }
@@ -852,11 +855,10 @@ impl Serialise for InternalContent {
 #[cfg_attr(debug_assertions, derive(specta::Type))]
 pub struct EntryDto {
     pub icon: String,
-    pub username: String,
+    pub fields: HashMap<String, Vec<u8>>,
     pub url: String,
     pub expiry_unix: Option<i64>,
     pub expiry_offset_secs: Option<i32>,
-    pub notes: String,
 }
 
 impl Entry {
@@ -867,11 +869,10 @@ impl Entry {
         };
         EntryDto {
             icon: self.icon.clone(),
-            username: self.username.clone(),
+            fields: self.fields.clone(),
             url: self.url.clone(),
             expiry_unix,
             expiry_offset_secs: expiry_offset,
-            notes: self.notes.clone(),
         }
     }
 }
@@ -887,16 +888,13 @@ impl DatabaseFile {
     }
 
     /// Adds an entry to the database, maintaining the files invariant.
-    /// `password` is provided as bytes; frontend should pass UTF-8 or arbitrary bytes as needed.
     pub fn add_entry_plain(
         &mut self,
         icon: &str,
-        username: &str,
-        password: Vec<u8>,
+        fields: HashMap<String, Vec<u8>>,
         url: &str,
         expiry_unix: Option<i64>,
         expiry_offset_secs: Option<i32>,
-        notes: &str,
     ) -> Result<(), std::io::Error> {
         let expiry = match (expiry_unix, expiry_offset_secs) {
             (Some(unix), Some(offset)) => {
@@ -917,7 +915,7 @@ impl DatabaseFile {
             _ => None,
         };
 
-        let entry = Entry::new(icon, username, password, url, expiry, notes);
+        let entry = Entry::new(icon, fields, url, expiry);
 
         self.internal_content.entries.push(entry);
         // Maintain invariant: files.len() == entries.len()
@@ -956,11 +954,12 @@ mod tests {
         let now = OffsetDateTime::now_utc().to_offset(UtcOffset::from_whole_seconds(3600).unwrap());
         Entry {
             icon: "<svg/>".to_string(),
-            username: "user".to_string(),
-            password: b"pass123".to_vec(),
+            fields: HashMap::from([
+                ("username".to_string(), b"user".to_vec()),
+                ("password".to_string(), b"pass123".to_vec()),
+            ]),
             url: "https://example.com".to_string(),
             expiry: Some(now + Duration::days(10)),
-            notes: "note".to_string(),
         }
     }
 
@@ -1022,10 +1021,12 @@ mod tests {
         let parsed = Entry::deserialise(&mut buf.as_slice()).unwrap();
 
         assert_eq!(parsed.icon, entry.icon);
-        assert_eq!(parsed.username, entry.username);
-        assert_eq!(parsed.password, entry.password);
+        for (key, value) in &entry.fields {
+            let (parsed_key, parsed_value) = parsed.fields.get_key_value(key).unwrap();
+            assert_eq!(key, parsed_key);
+            assert_eq!(value, parsed_value);
+        }
         assert_eq!(parsed.url, entry.url);
-        assert_eq!(parsed.notes, entry.notes);
 
         match (parsed.expiry, entry.expiry) {
             (Some(a), Some(b)) => {

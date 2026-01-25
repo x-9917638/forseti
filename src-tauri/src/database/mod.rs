@@ -1,7 +1,7 @@
 mod helpers;
 mod structs;
 
-use std::sync::Mutex;
+use std::{collections::HashMap, sync::Mutex};
 use tauri::{State, command};
 
 use structs::{
@@ -117,12 +117,10 @@ pub fn list_entries(state: State<AppState>) -> Result<Vec<EntryDto>, String> {
 pub fn add_entry(
     state: State<AppState>,
     icon: String,
-    username: String,
-    password: String,
+    fields: HashMap<String, Vec<u8>>,
     url: String,
     expiry_unix: Option<i64>,
     expiry_offset_secs: Option<i32>,
-    notes: String,
 ) -> Result<(), String> {
     let mut guard = state
         .current_db
@@ -132,16 +130,8 @@ pub fn add_entry(
         .as_mut()
         .ok_or_else(|| "no database open".to_string())?;
 
-    db.add_entry_plain(
-        &icon,
-        &username,
-        password.into_bytes(),
-        &url,
-        expiry_unix,
-        expiry_offset_secs,
-        &notes,
-    )
-    .map_err(|e| format!("failed to add entry: {e}"))?;
+    db.add_entry_plain(&icon, fields, &url, expiry_unix, expiry_offset_secs)
+        .map_err(|e| format!("failed to add entry: {e}"))?;
 
     Ok(())
 }

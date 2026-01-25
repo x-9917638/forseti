@@ -1,6 +1,8 @@
 pub mod database;
 
 use database::*;
+use std::error;
+use tauri::App;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -19,8 +21,14 @@ pub fn run() {
             add_entry,
             new_db,
         ])
+        .setup(app_setup)
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+// Setup function for configuration of Tauri from Rust.
+fn app_setup(app: &mut App) -> Result<(), Box<dyn error::Error>> {
+    Ok(())
 }
 
 #[cfg(debug_assertions)]
