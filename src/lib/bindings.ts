@@ -69,9 +69,9 @@ async listEntries() : Promise<Result<EntryDto[], string>> {
 /**
  * Adds an entry to the in-memory database.
  */
-async addEntry({ icon, username, password, url, expiryUnix, expiryOffsetSecs, notes }: { icon: string; username: string; password: string; url: string; expiryUnix: number | null; expiryOffsetSecs: number | null; notes: string }) : Promise<Result<null, string>> {
+async addEntry({ icon, fields, url, expiryUnix, expiryOffsetSecs }: { icon: string; fields: Partial<{ [key in string]: string }>; url: string; expiryUnix: number | null; expiryOffsetSecs: number | null }) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("add_entry", { icon, username, password, url, expiryUnix, expiryOffsetSecs, notes }) };
+    return { status: "ok", data: await TAURI_INVOKE("add_entry", { icon, fields, url, expiryUnix, expiryOffsetSecs }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -100,7 +100,7 @@ async newDb({ encryption, compression, kdfVariant, kdfIterations, kdfMemoryKb, k
 
 /** user-defined types **/
 
-export type EntryDto = { icon: string; username: string; url: string; expiry_unix: number | null; expiry_offset_secs: number | null; notes: string }
+export type EntryDto = { icon: string; fields: Partial<{ [key in string]: number[] }>; url: string; expiry_unix: number | null; expiry_offset_secs: number | null }
 
 /** tauri-specta globals **/
 
