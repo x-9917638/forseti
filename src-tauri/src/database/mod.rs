@@ -21,6 +21,12 @@ impl AppState {
         }
     }
 }
+// Clippy screaming at me
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Returns whether a database is currently open in memory.
 #[command]
@@ -168,7 +174,7 @@ pub fn new_db(
 
     let fields = HeaderFields::new(encryption_enum, compression_enum, params);
     let header = Header::new(fields);
-    let internal = InternalContent::empty();
+    let internal = InternalContent::new();
 
     let db = DatabaseFile::new(header, internal);
 
