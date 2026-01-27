@@ -1,6 +1,3 @@
-// During development of the lib
-#![allow(unused)]
-
 use super::helpers::*;
 use aes_gcm::{
     Aes256Gcm, Nonce as AesNonce,
@@ -19,6 +16,7 @@ use std::{
     io::{self, Read, Write},
 };
 use time::{self, OffsetDateTime};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 trait RegenerateNonces {
     /// This function should regenerate all nonces in the struct.
@@ -46,6 +44,7 @@ trait Serialise: Sized {
 /// internal_content_hash
 ///
 /// internal_content (encrypted, optionally compressed)
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct DatabaseFile {
     header: Header,
     /// 256-bit blake3 keyed hash of the outer header
@@ -340,6 +339,7 @@ pub enum SaveMethod {
 }
 
 /// The header of the database.
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct Header {
     sig_1: u32, // 0x1c2f4ee6
     sig_2: u32, // 0xb224e656
@@ -388,6 +388,7 @@ impl Serialise for Header {
 /// Size of HeaderFields struct in bytes (u8)
 const HEADER_FIELDS_SIZE: usize = 1 + 1 + 32 + 12 + KDF_PARAMS_SIZE;
 
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct HeaderFields {
     /// The encryption algorithm to use.
     /// Defaults to AES-256
@@ -420,9 +421,6 @@ impl HeaderFields {
             init_vector: [0u8; 12],
             key_derivation_params,
         }
-    }
-    fn make_hash(&self) {
-        todo!()
     }
 }
 
@@ -473,6 +471,7 @@ impl Serialise for HeaderFields {
     }
 }
 
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub enum EncryptionAlgorithm {
     // All are 256-bit
     Aes = 0,
@@ -484,13 +483,6 @@ impl EncryptionAlgorithm {
         match self {
             Self::Aes => 0,
             Self::ChaCha20 => 1,
-        }
-    }
-    fn from_u8(i: u8) -> Self {
-        match i {
-            0 => Self::Aes,
-            1 => Self::ChaCha20,
-            _ => unreachable!("Invalid value for encryption algorithm"),
         }
     }
     pub fn try_from_u8(i: u8) -> Result<Self, io::Error> {
@@ -505,6 +497,7 @@ impl EncryptionAlgorithm {
     }
 }
 
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub enum CompressionAlgorithm {
     None = 0,
     Lz4 = 1,
@@ -517,14 +510,6 @@ impl CompressionAlgorithm {
             Self::None => 0,
             Self::Lz4 => 1,
             Self::GZip => 2,
-        }
-    }
-    fn from_u8(i: u8) -> Self {
-        match i {
-            0 => Self::None,
-            1 => Self::Lz4,
-            2 => Self::GZip,
-            _ => unreachable!("Invalid value for compression algorithm"),
         }
     }
     pub fn try_from_u8(i: u8) -> Result<Self, io::Error> {
@@ -543,6 +528,7 @@ impl CompressionAlgorithm {
 /// Size of KDFParams struct in bytes (u8)
 const KDF_PARAMS_SIZE: usize = 1 + 32 + 4 + 4 + 4;
 /// Struct containing the parameters that should be passed to the key derivation function
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct KDFParams {
     /// Which vairant of Argon2 to use.
     ///
@@ -619,6 +605,7 @@ impl Serialise for KDFParams {
     }
 }
 
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub enum KeyDerivationFunction {
     Argon2d = 0,
     Argon2id = 1,
@@ -629,13 +616,6 @@ impl KeyDerivationFunction {
         match self {
             Self::Argon2d => 0,
             Self::Argon2id => 1,
-        }
-    }
-    fn from_u8(i: u8) -> Self {
-        match i {
-            0 => Self::Argon2d,
-            1 => Self::Argon2id,
-            _ => unreachable!("Invalid value for key derivation function"),
         }
     }
     pub fn try_from_u8(i: u8) -> Result<Self, io::Error> {
@@ -678,6 +658,24 @@ impl Entry {
             url: url.to_string(),
             expiry,
         }
+    }
+}
+
+impl Zeroize for Entry {
+    fn zeroize(&mut self) {
+        self.icon.zeroize();
+        for (mut key, mut value) in self.fields.drain() {
+            key.zeroize();
+            value.zeroize();
+        }
+        self.url.zeroize();
+        self.expiry = None;
+    }
+}
+
+impl Drop for Entry {
+    fn drop(&mut self) {
+        self.zeroize();
     }
 }
 
@@ -771,6 +769,7 @@ impl Serialise for time::OffsetDateTime {
     }
 }
 
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct InternalContent {
     entries: Vec<Entry>,
     /// A list of files associated with each entry.
@@ -785,7 +784,7 @@ pub struct InternalContent {
 }
 
 impl InternalContent {
-    pub fn empty() -> Self {
+    pub fn new() -> Self {
         Self {
             entries: Vec::new(),
             files: Vec::new(),
@@ -1224,6 +1223,6 @@ mod tests {
         let tmp = std::env::temp_dir().join("forseti_test_wrong_pw.tfedb");
         std::fs::write(&tmp, &buf).unwrap();
 
-        let result = DatabaseFile::deserialise(tmp.to_str().unwrap(), wrong).unwrap();
+        let _result = DatabaseFile::deserialise(tmp.to_str().unwrap(), wrong).unwrap();
     }
 }
