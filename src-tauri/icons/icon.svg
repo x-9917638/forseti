@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="512"
+   height="512"
+   viewBox="0 0 512 512"
+   version="1.1"
+   id="svg1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1">
+    <font
+       horiz-adv-x="1000"
+       id="font17"
+       horiz-origin-x="0"
+       horiz-origin-y="0"
+       vert-origin-x="512"
+       vert-origin-y="768"
+       vert-adv-y="1024">
+      <font-face
+         units-per-em="1000"
+         ascent="750"
+         cap-height="600"
+         x-height="400"
+         descent="200"
+         id="font-face17"
+         font-family="SVGFont 1" />
+      <missing-glyph
+         d="M0,0h1000v1000h-1000z"
+         id="missing-glyph17" />
+      <glyph
+         glyph-name=""
+         unicode=" "
+         id="glyph17" />
+    </font>
+  </defs>
+  <g
+     id="layer1"
+     style="display:inline">
+    <circle
+       style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:6.91898;stroke-dasharray:none;stroke-opacity:1"
+       id="path12"
+       cx="256"
+       cy="256"
+       r="252.54051" />
+    <g
+       id="g21"
+       style="fill:#ffffff;fill-opacity:1">
+      <text
+         xml:space="preserve"
+         style="font-style:italic;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:12px;font-family:'Maple Mono NF CN';-inkscape-font-specification:'Maple Mono NF CN, Italic';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;writing-mode:lr-tb;direction:ltr;white-space:pre;inline-size:24.2272;display:inline;fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:0.262268;stroke-dasharray:none;stroke-opacity:1"
+         x="272.0773"
+         y="181.18941"
+         id="text17"
+         transform="matrix(21.006404,0,0,44.293405,-5511.4098,-7618.9856)"><tspan
+           x="272.0773"
+           y="181.18941"
+           id="tspan1">F</tspan></text>
+      <ellipse
+         style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:8.28864;stroke-dasharray:none;stroke-opacity:1"
+         id="path18"
+         cx="213.62935"
+         cy="455.23166"
+         rx="43.828239"
+         ry="41.633606" />
+      <circle
+         style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:8;stroke-dasharray:none;stroke-opacity:1"
+         id="path19"
+         cx="172.99094"
+         cy="390.32596"
+         r="33.498779" />
+      <circle
+         style="display:inline;fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:8;stroke-dasharray:none;stroke-opacity:1"
+         id="path19-7"
+         cx="266.83176"
+         cy="396.84207"
+         r="33.498779" />
+    </g>
+    <rect
+       style="fill:#ebebeb;fill-opacity:1;stroke:#000000;stroke-width:8;stroke-dasharray:none;stroke-opacity:1"
+       id="rect20"
+       width="1.9403188"
+       height="5.6996865"
+       x="205.43126"
+       y="405.16284" />
+    <rect
+       style="fill:#ebebeb;fill-opacity:1;stroke:#000000;stroke-width:8;stroke-dasharray:none;stroke-opacity:1"
+       id="rect21"
+       width="3.2742882"
+       height="7.1549258"
+       x="230.04906"
+       y="406.4968" />
+  </g>
+</svg>
