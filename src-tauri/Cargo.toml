@@ -38,6 +38,7 @@ chacha20poly1305 = "0.10.1"
 tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
 specta = "=2.0.0-rc.22"
 specta-typescript = "=0.0.9"
+zeroize = { version = "1.8.2", features = ["derive"] }
 
 [profile.dev]
 incremental = true # Compile your binary in smaller steps.
