@@ -1,6 +1,8 @@
 pub mod database;
+pub mod generator;
 
 use database::*;
+use generator::generate_password;
 use std::error;
 use tauri::App;
 
@@ -20,6 +22,7 @@ pub fn run() {
             list_entries,
             add_entry,
             new_db,
+            generate_password
         ])
         .setup(app_setup)
         .run(tauri::generate_context!())
@@ -37,25 +40,24 @@ fn export_types() {
     use specta_typescript::Typescript;
     use tauri_specta::{Builder, collect_commands};
 
-    let builder = Builder::<tauri::Wry>::new()
-        // Then register them (separated by a comma)
-        .commands(collect_commands![
-            is_db_open,
-            close_db,
-            load_db,
-            save_db,
-            list_entries,
-            add_entry,
-            new_db,
-        ]);
+    let builder = Builder::<tauri::Wry>::new().commands(collect_commands![
+        is_db_open,
+        close_db,
+        load_db,
+        save_db,
+        list_entries,
+        add_entry,
+        new_db,
+        generate_password
+    ]);
     builder
         .export(
             Typescript::new().bigint(specta_typescript::BigIntExportBehavior::Number),
-            "/home/val/Documents/forseti/src/lib/bindings.ts",
+            "../src/lib/bindings.ts",
         )
         .expect("Failed to export typescript bindings");
     let _ = std::process::Command::new("npx")
         .arg("ts-node")
-        .arg("/home/val/Documents/forseti/convert-to-object-params.ts")
+        .arg("../convert-to-object-params.ts")
         .output();
 }
