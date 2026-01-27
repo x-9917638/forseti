@@ -8,6 +8,3 @@ node_modules
 !.env.example
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
-
-# Some build stuff
-convert-to-object-params.ts
