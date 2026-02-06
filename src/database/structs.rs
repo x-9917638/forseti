@@ -850,8 +850,7 @@ impl Serialise for InternalContent {
     }
 }
 
-#[derive(serde::Serialize)]
-#[cfg_attr(debug_assertions, derive(specta::Type))]
+#[derive(Clone, serde::Serialize)]
 pub struct EntryDto {
     pub icon: String,
     pub fields: HashMap<String, Vec<u8>>,

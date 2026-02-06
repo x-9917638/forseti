@@ -2,7 +2,6 @@ use rand::{
     Rng, rng,
     seq::{IteratorRandom, SliceRandom},
 };
-use tauri::command;
 
 const UPPERCASE_LETTERS: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const LOWERCASE_LETTERS: &str = "abcdefghijklmnopqrstuvwxyz";
@@ -87,8 +86,6 @@ fn _generate_password<R: Rng>(
     Ok(out.into_iter().collect())
 }
 
-#[command]
-#[cfg_attr(debug_assertions, specta::specta)]
 pub fn generate_password(names: Vec<&str>, length: usize) -> Result<String, String> {
     _generate_password(&mut rng(), names, length)
 }

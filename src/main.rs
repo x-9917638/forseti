@@ -2,5 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    forseti_lib::run()
+    if let Err(e) = forseti_lib::run() {
+        eprintln!("Failed to start Forseti: {e}");
+    }
 }
