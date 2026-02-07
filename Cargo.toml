@@ -6,7 +6,6 @@ authors = ["valerie <valerie@ouppy.gay>"]
 edition = "2024"
 
 [lib]
-# Keep the explicit lib name so the binary can import it without conflict.
 name = "forseti_lib"
 
 [dependencies]
@@ -21,14 +20,13 @@ aes-gcm = "0.10.3"
 chacha20poly1305 = "0.10.1"
 zeroize = { version = "1.8.2", features = ["derive"] }
 serde = "1.0.228"
-hex = "0.4.3"
 
 [profile.dev]
-incremental = true # Compile your binary in smaller steps.
+incremental = true
 
 [profile.release]
-codegen-units = 1 # Allows LLVM to perform better optimization.
-lto = true # Enables link-time-optimizations.
-opt-level = "s" # Prioritizes small binary size. Use `3` if you prefer speed.
-panic = "abort" # Higher performance by disabling panic handlers.
-strip = true # Ensures debug symbols are removed.
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
