@@ -19,7 +19,10 @@ argon2 = "0.5.3"
 aes-gcm = "0.10.3"
 chacha20poly1305 = "0.10.1"
 zeroize = { version = "1.8.2", features = ["derive"] }
-serde = "1.0.228"
+serde = { version = "1.0.228", features = ["rc"] }
+
+[lints.rust]
+unused = "allow" # I have a lot of boilerplate rn.
 
 [profile.dev]
 incremental = true

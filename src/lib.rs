@@ -11,5 +11,5 @@ struct State {}
 enum Message {}
 
 pub fn run() -> Result<(), String> {
-    return Ok(());
+    Ok(())
 }
