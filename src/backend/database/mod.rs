@@ -7,9 +7,7 @@ use structs::{
 
 mod helpers;
 mod structs;
-
-pub use structs::EntryDto;
-
+use structs::Entry;
 /// Application state holding a single open database in memory.
 pub struct AppState {
     current_db: Mutex<Option<DatabaseFile>>,
@@ -82,7 +80,7 @@ impl AppState {
     }
 
     /// Lists entries from the open database.
-    pub fn list_entries(&self) -> Result<Vec<EntryDto>, String> {
+    pub fn list_entries(&self) -> Result<Vec<Entry>, String> {
         let guard = self
             .current_db
             .lock()
@@ -90,7 +88,7 @@ impl AppState {
         let db = guard
             .as_ref()
             .ok_or_else(|| "no database open".to_string())?;
-        Ok(db.list_entries_dto())
+        Ok(db.get_entries())
     }
 
     /// Adds an entry to the in-memory database.

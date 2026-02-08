@@ -10,13 +10,14 @@ use flate2::{Compression, write::GzEncoder};
 use lz4_flex::frame::FrameEncoder;
 use rand::{Rng, TryRngCore, rng, rngs::OsRng};
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     env,
     fs::{File, copy, remove_file, rename},
     io::{self, Read, Write},
+    rc::Rc,
 };
 use time::{self, OffsetDateTime};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 trait RegenerateNonces {
     /// This function should regenerate all nonces in the struct.
@@ -330,6 +331,9 @@ impl DatabaseFile {
         kdf.hash_password_into(password, &params.salt, &mut output)?;
         Ok(output)
     }
+    pub fn get_entries(&self) -> Vec<Entry> {
+        self.internal_content.entries.clone()
+    }
 }
 
 pub enum SaveMethod {
@@ -630,17 +634,21 @@ impl KeyDerivationFunction {
     }
 }
 
+// Because Entrys need to be frequently cloned we utilise Rc.
+// Updating an Entry would never be mutating a String anyways
+// under the iced.rs model.
+#[derive(Clone)]
 pub struct Entry {
     /// An svg icon.
     ///
     /// An empty string represents no icon.
-    icon: String,
+    icon: Rc<str>,
     /// Fields have arbitrary names and values, set by the user.
     /// They can hold passwords, notes, etc.
-    fields: HashMap<String, Vec<u8>>,
+    fields: BTreeMap<Rc<str>, Zeroizing<Vec<u8>>>,
     /// URL's have a specific field in order to easier integrate with
     /// the browser extension.
-    url: String,
+    url: Rc<str>,
     /// The date and time of password expiry, in local timezone.
     expiry: Option<time::OffsetDateTime>,
 }
@@ -648,14 +656,14 @@ pub struct Entry {
 impl Entry {
     pub fn new(
         icon: &str,
-        fields: HashMap<String, Vec<u8>>,
+        fields: BTreeMap<Rc<str>, Zeroizing<Vec<u8>>>,
         url: &str,
         expiry: Option<time::OffsetDateTime>,
     ) -> Self {
         Self {
-            icon: icon.to_string(),
+            icon: Rc::from(icon),
             fields,
-            url: url.to_string(),
+            url: Rc::from(url),
             expiry,
         }
     }
@@ -663,12 +671,11 @@ impl Entry {
 
 impl Zeroize for Entry {
     fn zeroize(&mut self) {
-        self.icon.zeroize();
-        for (mut key, mut value) in self.fields.drain() {
-            key.zeroize();
-            value.zeroize();
-        }
-        self.url.zeroize();
+        // We only need to zeroize the sensitive data in fields,
+        // which is wrapped in Zeroizing anyways.
+        self.icon = Rc::default();
+        self.fields = BTreeMap::new();
+        self.url = Rc::default();
         self.expiry = None;
     }
 }
@@ -706,11 +713,14 @@ impl Serialise for Entry {
     fn deserialise<R: Read>(r: &mut R) -> io::Result<Self> {
         let icon = read_string(r)?;
         let num_fields = read_u64(r)?;
-        let mut fields = HashMap::new(); //with_capacity(num_fields as usize);
+        let mut fields = BTreeMap::new(); //with_capacity(num_fields as usize);
         for _ in 0..num_fields {
             let (key, value) = read_key_value(r)?;
             // We should never run into an existing key.
-            assert_eq!(None, fields.insert(key, value));
+            assert_eq!(
+                None,
+                fields.insert(Rc::from(key.as_ref()), Zeroizing::from(value))
+            );
         }
         let url = read_string(r)?;
 
@@ -722,9 +732,9 @@ impl Serialise for Entry {
         };
 
         Ok(Self {
-            icon,
+            icon: icon.into(),
             fields,
-            url,
+            url: url.into(),
             expiry,
         })
     }
@@ -850,46 +860,12 @@ impl Serialise for InternalContent {
     }
 }
 
-#[derive(Clone, serde::Serialize)]
-pub struct EntryDto {
-    pub icon: String,
-    pub fields: HashMap<String, Vec<u8>>,
-    pub url: String,
-    pub expiry_unix: Option<i64>,
-    pub expiry_offset_secs: Option<i32>,
-}
-
-impl Entry {
-    pub fn to_dto(&self) -> EntryDto {
-        let (expiry_unix, expiry_offset) = match self.expiry {
-            Some(dt) => (Some(dt.unix_timestamp()), Some(dt.offset().whole_seconds())),
-            None => (None, None),
-        };
-        EntryDto {
-            icon: self.icon.clone(),
-            fields: self.fields.clone(),
-            url: self.url.clone(),
-            expiry_unix,
-            expiry_offset_secs: expiry_offset,
-        }
-    }
-}
-
 impl DatabaseFile {
-    /// Returns a list of entries as JSON-friendly DTOs without exposing secrets.
-    pub fn list_entries_dto(&self) -> Vec<EntryDto> {
-        self.internal_content
-            .entries
-            .iter()
-            .map(|e| e.to_dto())
-            .collect()
-    }
-
     /// Adds an entry to the database, maintaining the files invariant.
     pub fn add_entry_plain(
         &mut self,
         icon: &str,
-        fields: HashMap<String, Vec<u8>>,
+        fields: BTreeMap<String, Vec<u8>>,
         url: &str,
         expiry_unix: Option<i64>,
         expiry_offset_secs: Option<i32>,
@@ -912,6 +888,10 @@ impl DatabaseFile {
             }
             _ => None,
         };
+        let fields = fields
+            .into_iter()
+            .map(|(k, v)| (k.into(), Zeroizing::from(v)))
+            .collect();
 
         let entry = Entry::new(icon, fields, url, expiry);
 
@@ -951,12 +931,12 @@ mod tests {
     fn sample_entry() -> Entry {
         let now = OffsetDateTime::now_utc().to_offset(UtcOffset::from_whole_seconds(3600).unwrap());
         Entry {
-            icon: "<svg/>".to_string(),
-            fields: HashMap::from([
-                ("username".to_string(), b"user".to_vec()),
-                ("password".to_string(), b"pass123".to_vec()),
+            icon: Rc::from("<svg/>"),
+            fields: BTreeMap::from([
+                (Rc::from("username"), Zeroizing::from(b"user".to_vec())),
+                (Rc::from("password"), Zeroizing::from(b"pass123".to_vec())),
             ]),
-            url: "https://example.com".to_string(),
+            url: Rc::from("https://example.com"),
             expiry: Some(now + Duration::days(10)),
         }
     }
